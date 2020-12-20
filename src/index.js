@@ -121,6 +121,12 @@ Usage: \`bridgeallgroups <puppetId>\``
 
 Usage: \`bridgealldms <puppetId>\``
     });
+    puppet.registerCommand("bridgeeverything", {
+        fn: groupme.bridgeEverything.bind(groupme),
+        help: `Bridge all of your groups and DMs
+
+Usage: \`bridgeeverything <puppetId>\``
+    });
 
     await puppet.start();
 }

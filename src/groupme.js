@@ -460,4 +460,17 @@ export class GroupMe {
         );
         await sendMessage("All DMs bridged");
     }
+
+    async bridgeEverything(puppetId, param, sendMessage) {
+        const p = this.puppets[puppetId];
+        if (!p) {
+            await sendMessage("Puppet not found!");
+            return;
+        }
+
+        await Promise.all([
+            this.bridgeAllGroups(puppetId, param, sendMessage),
+            this.bridgeAllDms(puppetId, param, sendMessage)
+        ]);
+    }
 }
