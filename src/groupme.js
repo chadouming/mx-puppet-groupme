@@ -1,3 +1,4 @@
+import Util from "util";
 import { URL } from "url";
 import Axios from "axios";
 import { Log } from "mx-puppet-bridge";
@@ -69,7 +70,6 @@ export class GroupMe {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        console.log(room);
         const res = await this.sendMessage(room, {
             source_guid: data.eventId,
             text: data.body
@@ -91,7 +91,6 @@ export class GroupMe {
             maxBodyLength: Infinity
         })).data;
         const fileId = new URL(fileInfo.status_url).searchParams.get("job");
-        console.log(`file id: ${fileId}`);
 
         while ((await p.client.fileApi.get(`/${room.roomId}/uploadStatus`, { params: { job: fileId } })).data.status !== "completed") {
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -176,9 +175,8 @@ export class GroupMe {
         const p = this.puppets[puppetId];
         if (!p) return;
 
-        console.log(message);
-        if (message.subject && message.subject.attachments) {
-            console.log(message.subject.attachments);
+        if (message.type !== "ping") {
+            log.debug(`Got message: ${Util.inspect(message, { depth: null })}`);
         }
 
         // Filter out our own messages
