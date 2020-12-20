@@ -308,17 +308,26 @@ export class GroupMe {
         const p = this.puppets[user.puppetId];
         if (!p) return null;
 
+        // First check group memberships
         const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
-        const userData = groups.flatMap(group => group.members).find(u => u.user_id === user.userId);
+        const groupUser = groups.flatMap(group => group.members).find(u => u.user_id === user.userId);
 
-        if (userData) {
+        if (groupUser) {
             return {
                 ...user,
-                name: userData.name,
-                avatarUrl: userData.image_url
+                name: groupUser.name,
+                avatarUrl: groupUser.image_url
             };
         } else {
-            return null;
+            // Check DMs instead
+            const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
+            const dmUser = dms.find(dm => dm.other_user.id === user.userId);
+
+            return {
+                ...user,
+                name: dmUser.name,
+                avatarUrl: dmUser.avatarUrl
+            };
         }
     }
 
@@ -326,9 +335,9 @@ export class GroupMe {
         const p = this.puppets[puppetId];
         if (!p) return null;
 
-        const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
-
         const list = [];
+
+        const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
         groups.forEach(group => {
             list.push({
                 category: true,
@@ -341,6 +350,21 @@ export class GroupMe {
                 })
             );
         });
+
+        const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
+        if (dms.length > 0) {
+            list.push({
+                category: true,
+                name: "DMs"
+            });
+            dms.forEach(dm =>
+                list.push({
+                    id: dm.other_user.id,
+                    name: dm.other_user.name
+                })
+            );
+        }
+
         return list;
     }
 
@@ -417,5 +441,23 @@ export class GroupMe {
             })
         );
         await sendMessage("All groups bridged");
+    }
+
+    async bridgeAllDms(puppetId, param, sendMessage) {
+        const p = this.puppets[puppetId];
+        if (!p) {
+            await sendMessage("Puppet not found!");
+            return;
+        }
+
+        const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
+
+        dms.forEach(async dm =>
+            await this.puppet.bridgeRoom({
+                roomId: dm.last_message.conversation_id,
+                puppetId
+            })
+        );
+        await sendMessage("All DMs bridged");
     }
 }
