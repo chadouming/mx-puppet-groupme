@@ -109,6 +109,12 @@ Usage: \`bridgegroup <puppetId> <groupId>\``
 
 Usage: \`unbridgegroup <puppetId> <groupId>\``
     });
+    puppet.registerCommand("bridgeallgroups", {
+        fn: groupme.bridgeAllGroups.bind(groupme),
+        help: `Bridge all groups you are in
+
+Usage: \`bridgeallgroups <puppetId>\``
+    });
 
     await puppet.start();
 }

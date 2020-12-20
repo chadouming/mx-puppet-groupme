@@ -348,7 +348,12 @@ export class GroupMe {
         const p = this.puppets[puppetId];
         if (!p) return null;
 
-        const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
+        const groups = (await p.client.api.get("/groups", {
+            params: {
+                per_page: "500",
+                omit: "memberships"
+            }
+        })).data.response;
 
         return groups.map(group => ({
             id: group.id,
@@ -374,7 +379,7 @@ export class GroupMe {
             roomId: param,
             puppetId
         });
-        await sendMessage("Channel bridged");
+        await sendMessage("Group bridged");
     }
 
     async unbridgeGroup(puppetId, param, sendMessage) {
@@ -388,6 +393,29 @@ export class GroupMe {
             roomId: param,
             puppetId
         });
-        await sendMessage("Channel unbridged");
+        await sendMessage("Group unbridged");
+    }
+
+    async bridgeAllGroups(puppetId, param, sendMessage) {
+        const p = this.puppets[puppetId];
+        if (!p) {
+            await sendMessage("Puppet not found!");
+            return;
+        }
+
+        const groups = (await p.client.api.get("/groups", {
+            params: {
+                per_page: "500",
+                omit: "memberships"
+            }
+        })).data.response;
+
+        groups.forEach(async group =>
+            await this.puppet.bridgeRoom({
+                roomId: group.id,
+                puppetId
+            })
+        );
+        await sendMessage("All groups bridged");
     }
 }
