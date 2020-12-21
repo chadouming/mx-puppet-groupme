@@ -232,6 +232,30 @@ export class GroupMe {
                             });
                             break;
                         }
+                        case "group.name_change": {
+                            await this.puppet.updateRoom({
+                                roomId: message.subject.group_id,
+                                puppetId,
+                                name: message.subject.event.data.name
+                            });
+                            break;
+                        }
+                        case "group.avatar_change": {
+                            await this.puppet.updateRoom({
+                                roomId: message.subject.group_id,
+                                puppetId,
+                                avatarUrl: message.subject.event.data.avatar_url
+                            });
+                            break;
+                        }
+                        case "group.topic_change": {
+                            await this.puppet.updateRoom({
+                                roomId: message.subject.group_id,
+                                puppetId,
+                                topic: message.subject.event.data.topic
+                            });
+                            break;
+                        }
                         default: {
                             await this.puppet.sendStatusMessage(
                                 { roomId: message.subject.group_id, puppetId },
