@@ -8,6 +8,10 @@ bridge:
   domain: matrix.org
   # Reachable URL of the Matrix homeserver
   homeserverUrl: https://matrix.org
+  # Display name of the bridge bot
+  #displayname: GroupMe bridge
+  # Avatar of the bridge bot
+  #avatarUrl: mxc://example.com/abcdef12345
 
 # Presence not available in this implementation
 #presence:
