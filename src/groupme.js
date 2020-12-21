@@ -206,6 +206,32 @@ export class GroupMe {
                             });
                             break;
                         }
+                        case "membership.nickname_changed": {
+                            const roomOverrides = {};
+                            roomOverrides[message.subject.group_id] = {
+                                name: message.subject.event.data.name
+                            };
+
+                            await this.puppet.updateUser({
+                                userId: message.subject.event.data.user.id.toString(),
+                                puppetId,
+                                roomOverrides
+                            });
+                            break;
+                        }
+                        case "membership.avatar_changed": {
+                            const roomOverrides = {};
+                            roomOverrides[message.subject.group_id] = {
+                                avatarUrl: message.subject.event.data.avatar_url
+                            };
+
+                            await this.puppet.updateUser({
+                                userId: message.subject.event.data.user.id.toString(),
+                                puppetId,
+                                roomOverrides
+                            });
+                            break;
+                        }
                         default: {
                             await this.puppet.sendStatusMessage(
                                 { roomId: message.subject.group_id, puppetId },
@@ -341,27 +367,52 @@ export class GroupMe {
         const p = this.puppets[user.puppetId];
         if (!p) return null;
 
-        // First check group memberships
-        const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
-        const groupUser = groups.flatMap(group => group.members).find(u => u.user_id === user.userId);
+        const [dms, groups] = await Promise.all([
+            p.client.api.get("/chats", { params: { per_page: "100" } })
+                .then(async res => res.data.response),
+            p.client.api.get("/groups", { params: { per_page: "500" } })
+                .then(async res => res.data.response)
+        ]);
 
-        if (groupUser) {
-            return {
-                ...user,
-                name: groupUser.name,
-                avatarUrl: groupUser.image_url
+        let profile;
+        // First try to get base profile from DMs
+        const dm = dms.find(dm => dm.other_user.id === user.userId);
+        if (dm) {
+            profile = {
+                name: dm.other_user.name,
+                avatarUrl: dm.other_user.avatar_url
             };
         } else {
-            // Check DMs instead
-            const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
-            const dmUser = dms.find(dm => dm.other_user.id === user.userId);
-
-            return {
-                ...user,
-                name: dmUser.name,
-                avatarUrl: dmUser.avatarUrl
+            const groupProfile = groups.flatMap(group => group.members)
+                .find(member => member.user_id === user.userId);
+            profile = {
+                name: groupProfile.name,
+                avatarUrl: groupProfile.image_url
             };
         }
+
+        const roomOverrides = Object.fromEntries(
+            groups.flatMap(group => {
+                const groupProfile = group.members.find(member => member.user_id === user.userId);
+
+                if (groupProfile &&
+                    !(groupProfile.nickname === profile.name &&
+                    groupProfile.image_url === profile.avatarUrl)) {
+                    return [[group.group_id, {
+                        name: groupProfile.nickname,
+                        avatarUrl: groupProfile.image_url
+                    }]];
+                } else {
+                    return [];
+                }
+            })
+        );
+
+        return {
+            ...user,
+            ...profile,
+            roomOverrides
+        };
     }
 
     async listUsers(puppetId) {
@@ -379,7 +430,7 @@ export class GroupMe {
             group.members.forEach(member =>
                 list.push({
                     id: member.user_id,
-                    name: member.name
+                    name: member.nickname
                 })
             );
         });
