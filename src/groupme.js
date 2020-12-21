@@ -25,19 +25,28 @@ export class GroupMe {
         };
         const p = this.puppets[puppetId];
 
-        await p.client.start();
+        try {
+            await p.client.start();
 
-        const me = (await p.client.api.get("/users/me")).data.response;
-        p.data.userId = me.user_id;
-        p.data.username = me.name;
+            const me = (await p.client.api.get("/users/me")).data.response;
+            p.data.userId = me.user_id;
+            p.data.username = me.name;
 
-        await this.puppet.setPuppetData(puppetId, p.data);
-        await this.puppet.setUserId(puppetId, p.data.userId);
-        await this.puppet.sendStatusMessage(puppetId, "connected");
+            await this.puppet.setPuppetData(puppetId, p.data);
+            await this.puppet.setUserId(puppetId, p.data.userId);
+            await this.puppet.sendStatusMessage(puppetId, "connected");
 
-        p.client.on("message", async message =>
-            this.handleGroupMeMessage.bind(this)(puppetId, message)
-        );
+            p.client.on("message", async message => {
+                try {
+                    await this.handleGroupMeMessage.bind(this)(puppetId, message);
+                } catch (err) {
+                    log.error(`Failed to handle GroupMe event: ${err}`);
+                }
+            });
+        } catch (err) {
+            log.error(`Failed to start puppet ${puppetId}: ${err}`);
+            await this.puppet.sendStatusMessage(puppetId, `Failed to connect: ${err}`);
+        }
     }
 
     async deletePuppet(puppetId) {
@@ -52,17 +61,22 @@ export class GroupMe {
         const p = this.puppets[room.puppetId];
         if (!p) return null;
 
-        if (room.roomId.includes("+")) {
-            return (await p.client.api.post("/direct_messages", {
-                direct_message: {
-                    ...data,
-                    recipient_id: room.roomId.split("+").find(userId => userId !== p.data.userId)
-                }
-            })).data.response;
-        } else {
-            return (await p.client.api.post(`/groups/${room.roomId}/messages`, {
-                message: data
-            })).data.response;
+        try {
+            if (room.roomId.includes("+")) {
+                return (await p.client.api.post("/direct_messages", {
+                    direct_message: {
+                        ...data,
+                        recipient_id: room.roomId.split("+").find(userId => userId !== p.data.userId)
+                    }
+                })).data.response;
+            } else {
+                return (await p.client.api.post(`/groups/${room.roomId}/messages`, {
+                    message: data
+                })).data.response;
+            }
+        } catch (err) {
+            log.warn(`Failed to send message to ${room.roomId}: ${err}`);
+            await this.puppet.sendStatusMessage(room, "Failed to send message");
         }
     }
 
@@ -85,52 +99,64 @@ export class GroupMe {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        const fileData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
-        const fileInfo = (await p.client.fileApi.post(`/${room.roomId}/files`, fileData, {
-            params: { name: data.filename },
-            maxBodyLength: Infinity
-        })).data;
-        const fileId = new URL(fileInfo.status_url).searchParams.get("job");
+        try {
+            const fileData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
+            const fileInfo = (await p.client.fileApi.post(`/${room.roomId}/files`, fileData, {
+                params: { name: data.filename },
+                maxBodyLength: Infinity
+            })).data;
+            const fileId = new URL(fileInfo.status_url).searchParams.get("job");
 
-        while ((await p.client.fileApi.get(`/${room.roomId}/uploadStatus`, { params: { job: fileId } })).data.status !== "completed") {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            while ((await p.client.fileApi.get(`/${room.roomId}/uploadStatus`, { params: { job: fileId } })).data.status !== "completed") {
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            const res = await this.sendMessage(room, {
+                source_guid: data.eventId,
+                attachments: [{
+                    type: "file",
+                    file_id: fileId
+                }]
+            });
+            this.puppet.eventSync.insert(
+                room,
+                data.eventId,
+                res.direct_message ? res.direct_message.id : res.message.id
+            );
+        } catch (err) {
+            log.warn(`Failed to upload file ${data.mxc}: ${err}`);
+            await this.puppet.sendStatusMessage(room, "Failed to upload file");
+            return;
         }
-
-        const res = await this.sendMessage(room, {
-            source_guid: data.eventId,
-            attachments: [{
-                type: "file",
-                file_id: fileId
-            }]
-        });
-        this.puppet.eventSync.insert(
-            room,
-            data.eventId,
-            res.direct_message ? res.direct_message.id : res.message.id
-        );
     }
 
     async handleMatrixImage(room, data, asUser, event) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        const imageData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
-        const imageInfo = (await p.client.imageApi.post("/pictures", imageData, {
-            headers: { "Content-Type": data.info.mimetype }
-        })).data;
+        try {
+            const imageData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
+            const imageInfo = (await p.client.imageApi.post("/pictures", imageData, {
+                headers: { "Content-Type": data.info.mimetype }
+            })).data;
 
-        const res = await this.sendMessage(room, {
-            source_guid: data.eventId,
-            attachments: [{
-                type: "image",
-                url: imageInfo.payload.url
-            }]
-        });
-        this.puppet.eventSync.insert(
-            room,
-            data.eventId,
-            res.direct_message ? res.direct_message.id : res.message.id
-        );
+            const res = await this.sendMessage(room, {
+                source_guid: data.eventId,
+                attachments: [{
+                    type: "image",
+                    url: imageInfo.payload.url
+                }]
+            });
+            this.puppet.eventSync.insert(
+                room,
+                data.eventId,
+                res.direct_message ? res.direct_message.id : res.message.id
+            );
+        } catch (err) {
+            log.warn(`Failed to upload image ${data.mxc}: ${err}`);
+            await this.puppet.sendStatusMessage(room, "Failed to upload image");
+            return;
+        }
     }
 
     async handleMatrixReaction(room, eventId, reaction, asUser, event) {
@@ -138,7 +164,12 @@ export class GroupMe {
         if (!p) return;
 
         if (reaction === "❤️") {
-            await p.client.api.post(`/messages/${room.roomId}/${eventId}/like`);
+            try {
+                await p.client.api.post(`/messages/${room.roomId}/${eventId}/like`);
+            } catch (err) {
+                log.warn(`Failed to like message ${eventId}: ${err}`);
+                await this.puppet.sendStatusMessage(room, "Failed to like message");
+            }
         } else {
             const res = await this.sendMessage(room, {
                 source_guid: event.eventId,
@@ -162,7 +193,12 @@ export class GroupMe {
         if (!p) return;
 
         if (reaction === "❤️") {
-            await p.client.api.post(`/messages/${room.roomId}/${eventId}/unlike`);
+            try {
+                await p.client.api.post(`/messages/${room.roomId}/${eventId}/unlike`);
+            } catch (err) {
+                log.warn(`Failed to unlike message ${eventId}: ${err}`);
+                await this.puppet.sendStatusMessage(room, "Failed to unlike message");
+            }
         }
     }
 
@@ -294,7 +330,7 @@ export class GroupMe {
                     };
                     let replyId;
 
-                    message.subject.attachments.forEach(async attachment => {
+                    await Promise.all(message.subject.attachments.map(async attachment => {
                         switch (attachment.type) {
                             case "file": {
                                 const fileInfo = (await p.client.fileApi.post(
@@ -322,7 +358,7 @@ export class GroupMe {
                                 replyId = attachment.reply_id;
                             }
                         }
-                    });
+                    }));
 
                     if (message.subject.text) {
                         if (replyId) {
@@ -376,8 +412,13 @@ export class GroupMe {
         if (room.roomId.includes("+")) {
             return new Set(room.roomId.split("+"));
         } else {
-            const members = (await p.client.api.get(`/groups/${room.roomId}`)).data.response.members;
-            return new Set(members.map(member => member.user_id));
+            try {
+                const members = (await p.client.api.get(`/groups/${room.roomId}`)).data.response.members;
+                return new Set(members.map(member => member.user_id));
+            } catch (err) {
+                log.error(`Failed to get users in ${room.roomId}: ${err}`);
+                return null;
+            }
         }
     }
 
@@ -391,14 +432,19 @@ export class GroupMe {
                 isDirect: true
             };
         } else {
-            const group = (await p.client.api.get(`/groups/${room.roomId}`)).data.response;
-            return {
-                ...room,
-                name: group.name,
-                topic: group.description,
-                avatarUrl: group.image_url,
-                isDirect: false
-            };
+            try {
+                const group = (await p.client.api.get(`/groups/${room.roomId}`)).data.response;
+                return {
+                    ...room,
+                    name: group.name,
+                    topic: group.description,
+                    avatarUrl: group.image_url,
+                    isDirect: false
+                };
+            } catch (err) {
+                log.warn(`Failed to get group info for ${room.roomId}: ${err}`);
+                return null;
+            }
         }
     }
 
@@ -406,106 +452,123 @@ export class GroupMe {
         const p = this.puppets[user.puppetId];
         if (!p) return null;
 
-        const [dms, groups] = await Promise.all([
-            p.client.api.get("/chats", { params: { per_page: "100" } })
-                .then(async res => res.data.response),
-            p.client.api.get("/groups", { params: { per_page: "500" } })
-                .then(async res => res.data.response)
-        ]);
+        try {
+            const [dms, groups] = await Promise.all([
+                p.client.api.get("/chats", { params: { per_page: "100" } })
+                    .then(async res => res.data.response),
+                p.client.api.get("/groups", { params: { per_page: "500" } })
+                    .then(async res => res.data.response)
+            ]);
 
-        let profile;
-        // First try to get base profile from DMs
-        const dm = dms.find(dm => dm.other_user.id === user.userId);
-        if (dm) {
-            profile = {
-                name: dm.other_user.name,
-                avatarUrl: dm.other_user.avatar_url
-            };
-        } else {
-            const groupProfile = groups.flatMap(group => group.members)
-                .find(member => member.user_id === user.userId);
-            profile = {
-                name: groupProfile.name,
-                avatarUrl: groupProfile.image_url
-            };
-        }
-
-        const roomOverrides = Object.fromEntries(
-            groups.flatMap(group => {
-                const groupProfile = group.members.find(member => member.user_id === user.userId);
-
-                if (groupProfile &&
-                    !(groupProfile.nickname === profile.name &&
-                    groupProfile.image_url === profile.avatarUrl)) {
-                    return [[group.group_id, {
-                        name: groupProfile.nickname,
+            let profile;
+            // First try to get base profile from DMs
+            const dm = dms.find(dm => dm.other_user.id === user.userId);
+            if (dm) {
+                profile = {
+                    name: dm.other_user.name,
+                    avatarUrl: dm.other_user.avatar_url
+                };
+            } else {
+                const groupProfile = groups.flatMap(group => group.members)
+                    .find(member => member.user_id === user.userId);
+                if (groupProfile) {
+                    profile = {
+                        name: groupProfile.name,
                         avatarUrl: groupProfile.image_url
-                    }]];
-                } else {
-                    return [];
+                    };
                 }
-            })
-        );
+            }
 
-        return {
-            ...user,
-            ...profile,
-            roomOverrides
-        };
+            const roomOverrides = Object.fromEntries(
+                groups.flatMap(group => {
+                    const groupProfile = group.members.find(member => member.user_id === user.userId);
+
+                    if (groupProfile &&
+                        !(groupProfile.nickname === profile.name &&
+                        groupProfile.image_url === profile.avatarUrl)) {
+                        return [[group.group_id, {
+                            name: groupProfile.nickname,
+                            avatarUrl: groupProfile.image_url
+                        }]];
+                    } else {
+                        return [];
+                    }
+                })
+            );
+
+            return {
+                ...user,
+                ...profile,
+                roomOverrides
+            };
+        } catch (err) {
+            log.error(`Failed to find profile for ${user.userId}: ${err}`);
+            return null;
+        }
     }
 
     async listUsers(puppetId) {
         const p = this.puppets[puppetId];
         if (!p) return null;
 
-        const list = [];
+        try {
+            const list = [];
 
-        const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
-        groups.forEach(group => {
-            list.push({
-                category: true,
-                name: group.name
-            });
-            group.members.forEach(member =>
+            const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
+            groups.forEach(group => {
                 list.push({
-                    id: member.user_id,
-                    name: member.nickname
-                })
-            );
-        });
+                    category: true,
+                    name: group.name
+                });
+                group.members.forEach(member =>
+                    list.push({
+                        id: member.user_id,
+                        name: member.nickname
+                    })
+                );
+            });
 
-        const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
-        if (dms.length > 0) {
-            list.push({
-                category: true,
-                name: "DMs"
-            });
-            dms.forEach(dm =>
+            const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
+            if (dms.length > 0) {
                 list.push({
-                    id: dm.other_user.id,
-                    name: dm.other_user.name
-                })
-            );
+                    category: true,
+                    name: "DMs"
+                });
+                dms.forEach(dm =>
+                    list.push({
+                        id: dm.other_user.id,
+                        name: dm.other_user.name
+                    })
+                );
+            }
+
+            return list;
+        } catch (err) {
+            log.error(`Failed to get user lists: ${err}`);
+            return [];
         }
-
-        return list;
     }
 
     async listRooms(puppetId) {
         const p = this.puppets[puppetId];
         if (!p) return null;
 
-        const groups = (await p.client.api.get("/groups", {
-            params: {
-                per_page: "500",
-                omit: "memberships"
-            }
-        })).data.response;
+        try {
+            const groups = (await p.client.api.get("/groups", {
+                params: {
+                    per_page: "500",
+                    omit: "memberships"
+                }
+            })).data.response;
 
-        return groups.map(group => ({
-            id: group.id,
-            name: group.name
-        }));
+            return groups.map(group => ({
+                id: group.id,
+                name: group.name
+            }));
+        } catch (err) {
+            log.error(`Failed to get group list: ${err}`);
+            return [];
+        }
     }
 
     async getDmRoomId(user) {
@@ -522,11 +585,16 @@ export class GroupMe {
             return;
         }
 
-        await this.puppet.bridgeRoom({
-            roomId: param,
-            puppetId
-        });
-        await sendMessage("Group bridged");
+        try {
+            await this.puppet.bridgeRoom({
+                roomId: param,
+                puppetId
+            });
+            await sendMessage("Group bridged");
+        } catch (err) {
+            log.warn(`Failed to bridge group ${param}: ${err}`);
+            await sendMessage("Failed to bridge group\nIs the group ID correct?");
+        }
     }
 
     async unbridgeGroup(puppetId, param, sendMessage) {
@@ -536,11 +604,16 @@ export class GroupMe {
             return;
         }
 
-        await this.puppet.unbridgeRoom({
-            roomId: param,
-            puppetId
-        });
-        await sendMessage("Group unbridged");
+        try {
+            await this.puppet.unbridgeRoom({
+                roomId: param,
+                puppetId
+            });
+            await sendMessage("Group unbridged");
+        } catch (err) {
+            log.warn(`Failed to unbridge group ${param}: ${err}`);
+            await sendMessage("Failed to unbridge group\nIs the group currently bridged, and the group ID correct?");
+        }
     }
 
     async bridgeAllGroups(puppetId, param, sendMessage) {
@@ -550,20 +623,25 @@ export class GroupMe {
             return;
         }
 
-        const groups = (await p.client.api.get("/groups", {
-            params: {
-                per_page: "500",
-                omit: "memberships"
-            }
-        })).data.response;
+        try {
+            const groups = (await p.client.api.get("/groups", {
+                params: {
+                    per_page: "500",
+                    omit: "memberships"
+                }
+            })).data.response;
 
-        groups.forEach(async group =>
-            await this.puppet.bridgeRoom({
-                roomId: group.id,
-                puppetId
-            })
-        );
-        await sendMessage("All groups bridged");
+            await Promise.all(groups.map(group =>
+                this.puppet.bridgeRoom({
+                    roomId: group.id,
+                    puppetId
+                })
+            ));
+            await sendMessage("All groups bridged");
+        } catch (err) {
+            log.error(`Failed to bridge groups: ${err}`);
+            await sendMessage("Failed to bridge groups");
+        }
     }
 
     async bridgeAllDms(puppetId, param, sendMessage) {
@@ -573,15 +651,20 @@ export class GroupMe {
             return;
         }
 
-        const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
+        try {
+            const dms = (await p.client.api.get("/chats", { params: { per_page: "100" } })).data.response;
 
-        dms.forEach(async dm =>
-            await this.puppet.bridgeRoom({
-                roomId: dm.last_message.conversation_id,
-                puppetId
-            })
-        );
-        await sendMessage("All DMs bridged");
+            await Promise.all(dms.map(dm =>
+                this.puppet.bridgeRoom({
+                    roomId: dm.last_message.conversation_id,
+                    puppetId
+                })
+            ));
+            await sendMessage("All DMs bridged");
+        } catch (err) {
+            log.error(`Failed to bridge DMs: ${err}`);
+            await sendMessage("Failed to bridge DMs");
+        }
     }
 
     async bridgeEverything(puppetId, param, sendMessage) {
