@@ -328,11 +328,15 @@ export class GroupMe {
                         },
                         eventId: message.subject.id
                     };
+
                     let replyId;
+                    let isFile = false;
 
                     await Promise.all(message.subject.attachments.map(async attachment => {
                         switch (attachment.type) {
                             case "file": {
+                                isFile = true;
+
                                 const fileInfo = (await p.client.fileApi.post(
                                     `/${sendParams.room.roomId}/fileData`,
                                     { file_ids: [ attachment.file_id ] }
@@ -347,7 +351,6 @@ export class GroupMe {
                                     fileBuffer,
                                     fileInfo[0].file_data.file_name
                                 );
-                                // TODO: Discard "Shared a document" message
                                 break;
                             }
                             case "image": {
@@ -360,15 +363,25 @@ export class GroupMe {
                         }
                     }));
 
-                    if (message.subject.text) {
+                    // Filter out "Shared a document" message
+                    let body = message.subject.text;
+                    if (isFile) {
+                        if (body.startsWith("Shared a document: ")) {
+                            body = null;
+                        } else {
+                            body = body.replace(/ - Shared a document: \S+$/g, "");
+                        }
+                    }
+
+                    if (body) {
                         if (replyId) {
                             await this.puppet.sendReply(sendParams, replyId, {
-                                body: message.subject.text,
+                                body,
                                 eventId: message.subject.id
                             });
                         } else {
                             await this.puppet.sendMessage(sendParams, {
-                                body: message.subject.text,
+                                body,
                                 eventId: message.subject.id
                             });
                         }
