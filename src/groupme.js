@@ -80,7 +80,7 @@ export class GroupMe {
         }
     }
 
-    async handleMatrixMessage(room, data, event) {
+    async handleMatrixMessage(room, data, asUser, event) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 

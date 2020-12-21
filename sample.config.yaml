@@ -36,6 +36,23 @@ provisioning:
     # Disallow users on a specific homeserver
     #- "@.*:yourserver\\.com"
 
+
+relay:
+  # Regex of Matrix IDs who are allowed to use the bridge in relay mode.
+  # Relay mode is when a single Discord bot account relays messages of
+  # multiple Matrix users
+  whitelist:
+    - "@.*:yourserver\\.com"
+  #blacklist:
+    #- "@user:yourserver\\.com"
+
+selfService:
+  # Regex of Matrix IDs who are allowed to use bridge self-servicing (plumbed rooms)
+  whitelist:
+    - "@.*:server\\.com"
+  #blacklist:
+    #- "@user:server\\.com"
+
 database:
   # Use Postgres as a database backend
   # If set, will be used instead of SQLite3

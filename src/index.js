@@ -37,7 +37,8 @@ const protocol = {
     features: {
         file: true,
         image: true,
-        reply: true
+        reply: true,
+        globalNamespace: true
     },
     id: "groupme",
     displayname: "GroupMe",
