@@ -80,7 +80,6 @@ async function run() {
     puppet.setListUsersHook(groupme.listUsers.bind(groupme));
     puppet.setListRoomsHook(groupme.listRooms.bind(groupme));
     puppet.setGetDescHook(async (puppetId, data) => {
-        console.log(data);
         let desc = "GroupMe";
         if (data.username) {
             desc += ` as ${data.username}`;
