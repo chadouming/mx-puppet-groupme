@@ -186,62 +186,91 @@ export class GroupMe {
         switch (message.type) {
             case "direct_message.create":
             case "line.create": {
-                const sendParams = {
-                    room: {
-                        roomId: message.subject.group_id ?
-                            message.subject.group_id :
-                            message.subject.chat_id,
-                        puppetId
-                    },
-                    user: {
-                        userId: message.subject.user_id,
-                        puppetId
-                    },
-                    eventId: message.subject.id
-                };
-                let replyId;
-
-                message.subject.attachments.forEach(async attachment => {
-                    switch (attachment.type) {
-                        case "file": {
-                            const fileInfo = (await p.client.fileApi.post(
-                                `/${sendParams.room.roomId}/fileData`,
-                                { file_ids: [ attachment.file_id ] }
-                            )).data;
-                            const fileBuffer = (await p.client.fileApi.get(
-                                `/${sendParams.room.roomId}/files/${attachment.file_id}`,
-                                { responseType: "arraybuffer" }
-                            )).data;
-
-                            this.puppet.sendFile(
-                                sendParams,
-                                fileBuffer,
-                                fileInfo[0].file_data.file_name
+                if (message.subject.user_id === "system") {
+                    switch (message.subject.event.type) {
+                        case "membership.announce.added": {
+                            await Promise.all(
+                                message.subject.event.data.added_users.map(user =>
+                                    this.puppet.addUser({
+                                        room: message.subject.group_id,
+                                        user: user.id
+                                    })
+                                )
                             );
-                            // TODO: Discard "Shared a document" message
                             break;
                         }
-                        case "image": {
-                            this.puppet.sendImage(sendParams, attachment.url);
+                        case "membership.notifications.exited": {
+                            await this.puppet.removeUser({
+                                room: message.subject.group_id,
+                                user: message.subject.event.data.removed_user.id
+                            });
                             break;
                         }
-                        case "reply": {
-                            replyId = attachment.reply_id;
+                        default: {
+                            await this.puppet.sendStatusMessage(
+                                { roomId: message.subject.group_id, puppetId },
+                                message.subject.text
+                            );
                         }
                     }
-                });
+                } else {
+                    const sendParams = {
+                        room: {
+                            roomId: message.subject.group_id ?
+                            message.subject.group_id :
+                            message.subject.chat_id,
+                            puppetId
+                        },
+                        user: {
+                            userId: message.subject.user_id,
+                            puppetId
+                        },
+                        eventId: message.subject.id
+                    };
+                    let replyId;
 
-                if (message.subject.text) {
-                    if (replyId) {
-                        await this.puppet.sendReply(sendParams, replyId, {
-                            body: message.subject.text,
-                            eventId: message.subject.id
-                        });
-                    } else {
-                        await this.puppet.sendMessage(sendParams, {
-                            body: message.subject.text,
-                            eventId: message.subject.id
-                        });
+                    message.subject.attachments.forEach(async attachment => {
+                        switch (attachment.type) {
+                            case "file": {
+                                const fileInfo = (await p.client.fileApi.post(
+                                    `/${sendParams.room.roomId}/fileData`,
+                                    { file_ids: [ attachment.file_id ] }
+                                )).data;
+                                const fileBuffer = (await p.client.fileApi.get(
+                                    `/${sendParams.room.roomId}/files/${attachment.file_id}`,
+                                    { responseType: "arraybuffer" }
+                                )).data;
+
+                                this.puppet.sendFile(
+                                    sendParams,
+                                    fileBuffer,
+                                    fileInfo[0].file_data.file_name
+                                );
+                                // TODO: Discard "Shared a document" message
+                                break;
+                            }
+                            case "image": {
+                                this.puppet.sendImage(sendParams, attachment.url);
+                                break;
+                            }
+                            case "reply": {
+                                replyId = attachment.reply_id;
+                            }
+                        }
+                    });
+
+                    if (message.subject.text) {
+                        if (replyId) {
+                            await this.puppet.sendReply(sendParams, replyId, {
+                                body: message.subject.text,
+                                eventId: message.subject.id
+                            });
+                        } else {
+                            await this.puppet.sendMessage(sendParams, {
+                                body: message.subject.text,
+                                eventId: message.subject.id
+                            });
+                        }
                     }
                 }
                 break;
@@ -265,6 +294,12 @@ export class GroupMe {
 
                 await this.puppet.sendReaction(sendParams, messageId, "❤️");
                 break;
+            }
+            case "membership.create": {
+                await this.puppet.bridgeRoom({
+                    roomId: message.subject.id,
+                    puppetId
+                });
             }
         }
     }
