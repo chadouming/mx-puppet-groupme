@@ -139,6 +139,21 @@ export class GroupMe {
 
         if (reaction === "❤️") {
             await p.client.api.post(`/messages/${room.roomId}/${eventId}/like`);
+        } else {
+            const res = await this.sendMessage(room, {
+                source_guid: event.eventId,
+                text: reaction,
+                attachments: [{
+                    type: "reply",
+                    reply_id: eventId,
+                    base_reply_id: eventId
+                }]
+            });
+            this.puppet.eventSync.insert(
+                room,
+                event.eventId,
+                res.direct_message ? res.direct_message.id : res.message.id
+            );
         }
     }
 
