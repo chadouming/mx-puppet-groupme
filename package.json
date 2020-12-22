@@ -1,6 +1,6 @@
 {
   "name": "mx-puppet-groupme",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Puppeting Matrix bridge for GroupMe",
   "main": "src/index.js",
   "type": "module",
