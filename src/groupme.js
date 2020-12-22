@@ -243,8 +243,14 @@ export class GroupMe {
                             await Promise.all(
                                 message.subject.event.data.added_users.map(user =>
                                     this.puppet.addUser({
-                                        room: message.subject.group_id,
-                                        user: user.id
+                                        room: {
+                                            roomId: message.subject.group_id,
+                                            puppetId
+                                        },
+                                        user: {
+                                            userId: user.id.toString(),
+                                            puppetId
+                                        }
                                     })
                                 )
                             );
@@ -252,8 +258,14 @@ export class GroupMe {
                         }
                         case "membership.notifications.exited": {
                             await this.puppet.removeUser({
-                                room: message.subject.group_id,
-                                user: message.subject.event.data.removed_user.id
+                                room: {
+                                    roomId: message.subject.group_id,
+                                    puppetId
+                                },
+                                user: {
+                                    userId: message.subject.event.data.removed_user.id.toString(),
+                                    puppetId
+                                }
                             });
                             break;
                         }
