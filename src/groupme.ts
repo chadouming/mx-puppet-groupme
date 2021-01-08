@@ -43,6 +43,13 @@ export class GroupMe {
                 try {
                     await this.handleGroupMeMessage.bind(this)(puppetId, message);
                 } catch (err) {
+                    log.error(`Failed to handle GroupMe message: ${err}`);
+                }
+            });
+            p.client.on("groupEvent", async (roomId, event) => {
+                try {
+                    await this.handleGroupMeEvent.bind(this)(puppetId, roomId, event);
+                } catch (err) {
                     log.error(`Failed to handle GroupMe event: ${err}`);
                 }
             });
@@ -218,7 +225,7 @@ export class GroupMe {
         }
 
         // Deduplicate messages
-        if (message.subject) {
+        if (message.subject && message.subject.source_guid) {
             const key = `${puppetId};${message.subject.group_id || message.subject.chat_id}`;
             if (await this.deduper.dedupe(key, message.subject.user_id, message.subject.source_guid)) {
                 log.debug("Deduping message, dropping...");
@@ -418,6 +425,33 @@ export class GroupMe {
                     roomId: message.subject.id,
                     puppetId
                 });
+                // Listen for group-specific events
+                await p.client.listenGroup(message.subject.id);
+            }
+        }
+    }
+
+    // Handle events specific to a group, which include typing notifications
+    async handleGroupMeEvent(puppetId, roomId, event) {
+        const p = this.puppets[puppetId];
+        if (!p) return;
+
+        log.debug(`Got event: ${Util.inspect(event, { depth: null })}`);
+
+        switch (event.type) {
+            case "typing": {
+                const sendParams = {
+                    room: {
+                        roomId,
+                        puppetId
+                    },
+                    user: {
+                        userId: event.user_id,
+                        puppetId
+                    }
+                };
+
+                await this.puppet.setUserTyping(sendParams, true);
             }
         }
     }

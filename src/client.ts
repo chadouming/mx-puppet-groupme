@@ -49,10 +49,30 @@ export class Client extends EventEmitter {
 
     async start() {
         const userId = (await this.api.get("/users/me")).data.response.user_id;
-        await this.faye.subscribe(`/user/${userId}`, message => this.emit("message", message));
+        const groupIds = (await this.api.get("/groups", {
+            params: {
+                per_page: "500",
+                omit: "memberships"
+            }
+        })).data.response.map(group => group.id);
+
+        await Promise.all([
+            this.faye.subscribe(`/user/${userId}`, message => this.emit("message", message)),
+            ...groupIds.map(groupId =>
+                this.faye.subscribe(`/group/${groupId}`, event =>
+                    this.emit("groupEvent", groupId, event)
+                )
+            )
+        ]);
     }
 
     async stop() {
         await this.faye.disconnect();
+    }
+
+    async listenGroup(groupId) {
+        await this.faye.subscribe(`/group/${groupId}`, event =>
+            this.emit("groupEvent", groupId, event)
+        );
     }
 }
