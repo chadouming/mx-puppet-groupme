@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
+    "module": "commonjs",
     "moduleResolution": "node",
-    "target": "es2019",
+    "esModuleInterop": true,
+    "target": "es2016",
     "noImplicitAny": false,
     "inlineSourceMap": true,
     "outDir": "./build",

@@ -1,3 +1,4 @@
+import fromEntries from "fromentries";
 import Util from "util";
 import { URL } from "url";
 import Axios from "axios";
@@ -505,7 +506,7 @@ export class GroupMe {
                 }
             }
 
-            const roomOverrides = Object.fromEntries(
+            const roomOverrides = fromEntries(
                 groups.flatMap(group => {
                     const groupProfile = group.members.find(member => member.user_id === user.userId);
 
