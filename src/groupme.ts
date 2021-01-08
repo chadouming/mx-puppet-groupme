@@ -401,11 +401,13 @@ export class GroupMe {
                 break;
             }
             case "like.create": {
+                // We only process likes in DMs here, since in groups it's
+                // more reliable to watch for `favorite` events instead
+                if (message.subject.line) break;
+
                 const sendParams = {
                     room: {
-                        roomId: message.subject.line ?
-                            message.subject.line.group_id :
-                            message.subject.direct_message.chat_id,
+                        roomId: message.subject.direct_message.chat_id,
                         puppetId
                     },
                     user: {
@@ -413,11 +415,8 @@ export class GroupMe {
                         puppetId
                     }
                 };
-                const messageId = message.subject.line ?
-                    message.subject.line.id :
-                    message.subject.direct_message.id;
 
-                await this.puppet.sendReaction(sendParams, messageId, "❤️");
+                await this.puppet.sendReaction(sendParams, message.subject.direct_message.id, "❤️");
                 break;
             }
             case "membership.create": {
@@ -431,7 +430,7 @@ export class GroupMe {
         }
     }
 
-    // Handle events specific to a group, which include typing notifications
+    // Handle events specific to a group, which include likes and typing notifications
     async handleGroupMeEvent(puppetId, roomId, event) {
         const p = this.puppets[puppetId];
         if (!p) return;
@@ -439,6 +438,22 @@ export class GroupMe {
         log.debug(`Got event: ${Util.inspect(event, { depth: null })}`);
 
         switch (event.type) {
+            case "favorite": {
+                const sendParams = {
+                    room: {
+                        roomId,
+                        puppetId
+                    },
+                    user: {
+                        userId: event.subject.user_id,
+                        puppetId
+                    }
+                };
+                const messageId = event.subject.line.id;
+
+                await this.puppet.sendReaction(sendParams, messageId, "❤️");
+                break;
+            }
             case "typing": {
                 const sendParams = {
                     room: {
