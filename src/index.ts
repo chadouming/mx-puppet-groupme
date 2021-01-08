@@ -1,4 +1,9 @@
-import { PuppetBridge, Log } from "mx-puppet-bridge";
+import {
+    PuppetBridge,
+    Log,
+    IProtocolInformation,
+    IRetData
+} from "mx-puppet-bridge";
 import commandLineArgs from "command-line-args";
 import commandLineUsage from "command-line-usage";
 import { GroupMe } from "./groupme.js";
@@ -33,7 +38,7 @@ if (options.help) {
     process.exit(0);
 }
 
-const protocol = {
+const protocol: IProtocolInformation = {
     features: {
         file: true,
         image: true,
@@ -80,7 +85,7 @@ async function run() {
     puppet.setGetDmRoomIdHook(groupme.getDmRoomId.bind(groupme));
     puppet.setListUsersHook(groupme.listUsers.bind(groupme));
     puppet.setListRoomsHook(groupme.listRooms.bind(groupme));
-    puppet.setGetDescHook(async (puppetId, data) => {
+    puppet.setGetDescHook(async (puppetId: number, data: any): Promise<string> => {
         let desc = "GroupMe";
         if (data.username) {
             desc += ` as ${data.username}`;
@@ -90,13 +95,13 @@ async function run() {
         }
         return desc;
     });
-    puppet.setGetDataFromStrHook(async str => ({
+    puppet.setGetDataFromStrHook(async (str: string): Promise<IRetData> => ({
         success: true,
         data: {
             token: str
         }
     }));
-    puppet.setBotHeaderMsgHook(() => "GroupMe bridge");
+    puppet.setBotHeaderMsgHook((): string => "GroupMe bridge");
     puppet.registerCommand("bridgegroup", {
         fn: groupme.bridgeGroup.bind(groupme),
         help: `Bridge a group

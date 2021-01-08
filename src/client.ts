@@ -12,13 +12,13 @@ export class Client extends EventEmitter {
     public fileApi: AxiosInstance;
     public imageApi: AxiosInstance;
 
-    constructor(token) {
+    constructor(token: string) {
         super();
 
         this.token = token;
         // Add access token to outgoing subscriptions
         this.faye.addExtension({
-            outgoing: (message, callback) => {
+            outgoing: (message: any, callback: (message: any) => any) => {
                 if (message.channel === "/meta/subscribe") {
                     callback({
                         ...message,
@@ -48,18 +48,18 @@ export class Client extends EventEmitter {
     }
 
     async start() {
-        const userId = (await this.api.get("/users/me")).data.response.user_id;
+        const userId: string = (await this.api.get("/users/me")).data.response.user_id;
         const groupIds = (await this.api.get("/groups", {
             params: {
                 per_page: "500",
                 omit: "memberships"
             }
-        })).data.response.map(group => group.id);
+        })).data.response.map((group: any): string => group.id);
 
         await Promise.all([
-            this.faye.subscribe(`/user/${userId}`, message => this.emit("message", message)),
+            this.faye.subscribe(`/user/${userId}`, (message: any) => this.emit("message", message)),
             ...groupIds.map(groupId =>
-                this.faye.subscribe(`/group/${groupId}`, event =>
+                this.faye.subscribe(`/group/${groupId}`, (event: any) =>
                     this.emit("groupEvent", groupId, event)
                 )
             )
@@ -70,8 +70,8 @@ export class Client extends EventEmitter {
         await this.faye.disconnect();
     }
 
-    async listenGroup(groupId) {
-        await this.faye.subscribe(`/group/${groupId}`, event =>
+    async listenGroup(groupId: string) {
+        await this.faye.subscribe(`/group/${groupId}`, (event: any) =>
             this.emit("groupEvent", groupId, event)
         );
     }

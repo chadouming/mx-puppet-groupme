@@ -2,21 +2,41 @@ import fromEntries from "fromentries";
 import Util from "util";
 import { URL } from "url";
 import Axios from "axios";
-import { Log, IRetList, MessageDeduplicator } from "mx-puppet-bridge";
+import {
+    Log,
+    MessageDeduplicator,
+    PuppetBridge,
+    IRetList,
+    IRemoteRoom,
+    IMessageEvent,
+    IFileEvent,
+    ISendingUser,
+    IReplyEvent,
+    IRemoteUserRoomOverride,
+    IReceiveParams,
+    IRemoteUser,
+    SendMessageFn
+} from "mx-puppet-bridge";
 import { Client } from "./client.js";
 
 const log = new Log("GroupMePuppet:groupme");
 
+interface IGroupMePuppet {
+    client: Client;
+    data: any;
+}
+
+interface IGroupMePuppets {
+    [puppetId: number]: IGroupMePuppet;
+}
+
 export class GroupMe {
-    private puppet;
-    private puppets = {};
+    private puppets: IGroupMePuppets = {};
     private deduper = new MessageDeduplicator();
 
-    constructor(puppet) {
-        this.puppet = puppet;
-    }
+    constructor(private puppet: PuppetBridge) { }
 
-    async newPuppet(puppetId, data) {
+    async newPuppet(puppetId: number, data: any) {
         if (this.puppets[puppetId]) {
             // The puppet somehow already exists, delete it first
             await this.deletePuppet(puppetId);
@@ -39,14 +59,14 @@ export class GroupMe {
             await this.puppet.setUserId(puppetId, p.data.userId);
             await this.puppet.sendStatusMessage(puppetId, "connected");
 
-            p.client.on("message", async message => {
+            p.client.on("message", async (message: any) => {
                 try {
                     await this.handleGroupMeMessage.bind(this)(puppetId, message);
                 } catch (err) {
                     log.error(`Failed to handle GroupMe message: ${err}`);
                 }
             });
-            p.client.on("groupEvent", async (roomId, event) => {
+            p.client.on("groupEvent", async (roomId: string, event: any) => {
                 try {
                     await this.handleGroupMeEvent.bind(this)(puppetId, roomId, event);
                 } catch (err) {
@@ -59,7 +79,7 @@ export class GroupMe {
         }
     }
 
-    async deletePuppet(puppetId) {
+    async deletePuppet(puppetId: number) {
         const p = this.puppets[puppetId];
         if (!p) return;
 
@@ -67,7 +87,7 @@ export class GroupMe {
         delete this.puppets[puppetId];
     }
 
-    async sendMessage(room, eventId, data) {
+    async sendMessage(room: IRemoteRoom, eventId: string, data: any) {
         const p = this.puppets[room.puppetId];
         if (!p) return null;
 
@@ -76,7 +96,7 @@ export class GroupMe {
             const key = `${room.puppetId};${room.roomId}`;
             this.deduper.unlock(key, p.data.userId, eventId);
 
-            let res;
+            let res: any;
             if (room.roomId.includes("+")) {
                 res = (await p.client.api.post("/direct_messages", {
                     direct_message: {
@@ -104,32 +124,42 @@ export class GroupMe {
         }
     }
 
-    async handleMatrixMessage(room, data, asUser, event) {
+    async handleMatrixMessage(
+        room: IRemoteRoom,
+        data: IMessageEvent,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        await this.sendMessage(room, data.eventId, {
+        await this.sendMessage(room, data.eventId!, {
             text: data.body
         });
     }
 
-    async handleMatrixFile(room, data, asUser, event) {
+    async handleMatrixFile(
+        room: IRemoteRoom,
+        data: IFileEvent,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
         try {
             const fileData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
-            const fileInfo = (await p.client.fileApi.post(`/${room.roomId}/files`, fileData, {
+            const fileInfo: any = (await p.client.fileApi.post(`/${room.roomId}/files`, fileData, {
                 params: { name: data.filename },
                 maxBodyLength: Infinity
             })).data;
-            const fileId = new URL(fileInfo.status_url).searchParams.get("job");
+            const fileId: string = new URL(fileInfo.status_url).searchParams.get("job")!;
 
             while ((await p.client.fileApi.get(`/${room.roomId}/uploadStatus`, { params: { job: fileId } })).data.status !== "completed") {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            await this.sendMessage(room, data.eventId, {
+            await this.sendMessage(room, data.eventId!, {
                 attachments: [{
                     type: "file",
                     file_id: fileId
@@ -142,17 +172,22 @@ export class GroupMe {
         }
     }
 
-    async handleMatrixImage(room, data, asUser, event) {
+    async handleMatrixImage(
+        room: IRemoteRoom,
+        data: IFileEvent,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
         try {
             const imageData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
-            const imageInfo = (await p.client.imageApi.post("/pictures", imageData, {
-                headers: { "Content-Type": data.info.mimetype }
+            const imageInfo: any = (await p.client.imageApi.post("/pictures", imageData, {
+                headers: { "Content-Type": data.info!.mimetype }
             })).data;
 
-            await this.sendMessage(room, data.eventId, {
+            await this.sendMessage(room, data.eventId!, {
                 attachments: [{
                     type: "image",
                     url: imageInfo.payload.url
@@ -165,7 +200,13 @@ export class GroupMe {
         }
     }
 
-    async handleMatrixReaction(room, eventId, reaction, asUser, event) {
+    async handleMatrixReaction(
+        room: IRemoteRoom,
+        eventId: string,
+        reaction: string,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
@@ -177,7 +218,7 @@ export class GroupMe {
                 await this.puppet.sendStatusMessage(room, "Failed to like message");
             }
         } else {
-            await this.sendMessage(room, event.eventId, {
+            await this.sendMessage(room, event.eventId!, {
                 text: reaction,
                 attachments: [{
                     type: "reply",
@@ -188,7 +229,13 @@ export class GroupMe {
         }
     }
 
-    async handleMatrixRemoveReaction(room, eventId, reaction, asUser, event) {
+    async handleMatrixRemoveReaction(
+        room: IRemoteRoom,
+        eventId: string,
+        reaction: string,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
@@ -202,11 +249,17 @@ export class GroupMe {
         }
     }
 
-    async handleMatrixReply(room, eventId, data, asUser, event) {
+    async handleMatrixReply(
+        room: IRemoteRoom,
+        eventId: string,
+        data: IReplyEvent,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        await this.sendMessage(room, data.eventId, {
+        await this.sendMessage(room, data.eventId!, {
             text: data.body.split("\n\n")[1],
             attachments: [{
                 type: "reply",
@@ -216,7 +269,7 @@ export class GroupMe {
         });
     }
 
-    async handleGroupMeMessage(puppetId, message) {
+    async handleGroupMeMessage(puppetId: number, message: any) {
         const p = this.puppets[puppetId];
         if (!p) return;
 
@@ -269,7 +322,7 @@ export class GroupMe {
                             break;
                         }
                         case "membership.nickname_changed": {
-                            const roomOverrides = {};
+                            const roomOverrides: {[roomId: string]: IRemoteUserRoomOverride} = {};
                             roomOverrides[message.subject.group_id] = {
                                 name: message.subject.event.data.name
                             };
@@ -282,7 +335,7 @@ export class GroupMe {
                             break;
                         }
                         case "membership.avatar_changed": {
-                            const roomOverrides = {};
+                            const roomOverrides: {[roomId: string]: IRemoteUserRoomOverride} = {};
                             roomOverrides[message.subject.group_id] = {
                                 avatarUrl: message.subject.event.data.avatar_url
                             };
@@ -326,7 +379,7 @@ export class GroupMe {
                         }
                     }
                 } else {
-                    const sendParams = {
+                    const sendParams: IReceiveParams = {
                         room: {
                             roomId: message.subject.group_id ?
                             message.subject.group_id :
@@ -340,10 +393,10 @@ export class GroupMe {
                         eventId: message.subject.id
                     };
 
-                    let replyId;
+                    let replyId: string | null = null;
                     let isFile = false;
 
-                    await Promise.all(message.subject.attachments.map(async attachment => {
+                    await Promise.all(message.subject.attachments.map(async (attachment: any) => {
                         switch (attachment.type) {
                             case "file": {
                                 isFile = true;
@@ -357,7 +410,7 @@ export class GroupMe {
                                     { responseType: "arraybuffer" }
                                 )).data;
 
-                                this.puppet.sendFile(
+                                await this.puppet.sendFile(
                                     sendParams,
                                     fileBuffer,
                                     fileInfo[0].file_data.file_name
@@ -365,7 +418,7 @@ export class GroupMe {
                                 break;
                             }
                             case "image": {
-                                this.puppet.sendImage(sendParams, attachment.url);
+                                await this.puppet.sendImage(sendParams, attachment.url);
                                 break;
                             }
                             case "reply": {
@@ -375,12 +428,12 @@ export class GroupMe {
                     }));
 
                     // Filter out "Shared a document" message
-                    let body = message.subject.text;
+                    let body: string | null = message.subject.text;
                     if (isFile) {
-                        if (body.startsWith("Shared a document: ")) {
+                        if (body!.startsWith("Shared a document: ")) {
                             body = null;
                         } else {
-                            body = body.replace(/ - Shared a document: \S+$/g, "");
+                            body = body!.replace(/ - Shared a document: \S+$/g, "");
                         }
                     }
 
@@ -405,7 +458,7 @@ export class GroupMe {
                 // more reliable to watch for `favorite` events instead
                 if (message.subject.line) break;
 
-                const sendParams = {
+                const sendParams: IReceiveParams = {
                     room: {
                         roomId: message.subject.direct_message.chat_id,
                         puppetId
@@ -431,7 +484,7 @@ export class GroupMe {
     }
 
     // Handle events specific to a group, which include likes and typing notifications
-    async handleGroupMeEvent(puppetId, roomId, event) {
+    async handleGroupMeEvent(puppetId: number, roomId: string, event: any) {
         const p = this.puppets[puppetId];
         if (!p) return;
 
@@ -439,7 +492,7 @@ export class GroupMe {
 
         switch (event.type) {
             case "favorite": {
-                const sendParams = {
+                const sendParams: IReceiveParams = {
                     room: {
                         roomId,
                         puppetId
@@ -455,7 +508,7 @@ export class GroupMe {
                 break;
             }
             case "typing": {
-                const sendParams = {
+                const sendParams: IReceiveParams = {
                     room: {
                         roomId,
                         puppetId
@@ -471,7 +524,7 @@ export class GroupMe {
         }
     }
 
-    async getUserIdsInRoom(room) {
+    async getUserIdsInRoom(room: IRemoteRoom): Promise<Set<string> | null> {
         const p = this.puppets[room.puppetId];
         if (!p) return null;
 
@@ -488,7 +541,7 @@ export class GroupMe {
         }
     }
 
-    async createRoom(room) {
+    async createRoom(room: IRemoteRoom): Promise<IRemoteRoom | null> {
         const p = this.puppets[room.puppetId];
         if (!p) return null;
 
@@ -514,7 +567,7 @@ export class GroupMe {
         }
     }
 
-    async createUser(user) {
+    async createUser(user: IRemoteUser): Promise<IRemoteUser | null> {
         const p = this.puppets[user.puppetId];
         if (!p) return null;
 
@@ -573,9 +626,9 @@ export class GroupMe {
         }
     }
 
-    async listUsers(puppetId) {
+    async listUsers(puppetId: number): Promise<IRetList[]> {
         const p = this.puppets[puppetId];
-        if (!p) return null;
+        if (!p) return [];
 
         try {
             const list: IRetList[] = [];
@@ -615,9 +668,9 @@ export class GroupMe {
         }
     }
 
-    async listRooms(puppetId) {
+    async listRooms(puppetId: number): Promise<IRetList[]> {
         const p = this.puppets[puppetId];
-        if (!p) return null;
+        if (!p) return [];
 
         try {
             const groups = (await p.client.api.get("/groups", {
@@ -637,14 +690,14 @@ export class GroupMe {
         }
     }
 
-    async getDmRoomId(user) {
+    async getDmRoomId(user: IRemoteUser): Promise<string | null> {
         const p = this.puppets[user.puppetId];
         if (!p) return null;
 
         return [p.data.userId, user.userId].sort().join("+");
     }
 
-    async bridgeGroup(puppetId, param, sendMessage) {
+    async bridgeGroup(puppetId: number, param: string, sendMessage: SendMessageFn) {
         const p = this.puppets[puppetId];
         if (!p) {
             await sendMessage("Puppet not found!");
@@ -663,7 +716,7 @@ export class GroupMe {
         }
     }
 
-    async unbridgeGroup(puppetId, param, sendMessage) {
+    async unbridgeGroup(puppetId: number, param: string, sendMessage: SendMessageFn) {
         const p = this.puppets[puppetId];
         if (!p) {
             await sendMessage("Puppet not found!");
@@ -682,7 +735,7 @@ export class GroupMe {
         }
     }
 
-    async bridgeAllGroups(puppetId, param, sendMessage) {
+    async bridgeAllGroups(puppetId: number, param: string, sendMessage: SendMessageFn) {
         const p = this.puppets[puppetId];
         if (!p) {
             await sendMessage("Puppet not found!");
@@ -710,7 +763,7 @@ export class GroupMe {
         }
     }
 
-    async bridgeAllDms(puppetId, param, sendMessage) {
+    async bridgeAllDms(puppetId: number, param: string, sendMessage: SendMessageFn) {
         const p = this.puppets[puppetId];
         if (!p) {
             await sendMessage("Puppet not found!");
@@ -733,7 +786,7 @@ export class GroupMe {
         }
     }
 
-    async bridgeEverything(puppetId, param, sendMessage) {
+    async bridgeEverything(puppetId: number, param: string, sendMessage: SendMessageFn) {
         const p = this.puppets[puppetId];
         if (!p) {
             await sendMessage("Puppet not found!");
