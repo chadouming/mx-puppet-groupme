@@ -2,7 +2,7 @@ import fromEntries from "fromentries";
 import Util from "util";
 import { URL } from "url";
 import Axios from "axios";
-import { Log, IRetList } from "mx-puppet-bridge";
+import { Log, IRetList, MessageDeduplicator } from "mx-puppet-bridge";
 import { Client } from "./client.js";
 
 const log = new Log("GroupMePuppet:groupme");
@@ -10,6 +10,7 @@ const log = new Log("GroupMePuppet:groupme");
 export class GroupMe {
     private puppet;
     private puppets = {};
+    private deduper = new MessageDeduplicator();
 
     constructor(puppet) {
         this.puppet = puppet;
@@ -64,6 +65,10 @@ export class GroupMe {
         if (!p) return null;
 
         try {
+            // Register message with deduplicator
+            const key = `${room.puppetId};${room.roomId}`;
+            this.deduper.unlock(key, p.data.userId, data.source_guid);
+
             if (room.roomId.includes("+")) {
                 return (await p.client.api.post("/direct_messages", {
                     direct_message: {
@@ -232,9 +237,14 @@ export class GroupMe {
             log.debug(`Got message: ${Util.inspect(message, { depth: null })}`);
         }
 
-        // Filter out our own messages
-        // TODO: Proper deduplication
-        if (message.subject && message.subject.user_id === p.data.userId) return;
+        // Deduplicate messages
+        if (message.subject) {
+            const key = `${puppetId};${message.subject.group_id || message.subject.chat_id}`;
+            if (await this.deduper.dedupe(key, message.subject.user_id, message.subject.source_guid)) {
+                log.debug("Deduping message, dropping...");
+                return;
+            }
+        }
 
         switch (message.type) {
             case "direct_message.create":
