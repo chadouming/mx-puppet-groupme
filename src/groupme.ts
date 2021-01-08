@@ -60,27 +60,37 @@ export class GroupMe {
         delete this.puppets[puppetId];
     }
 
-    async sendMessage(room, data) {
+    async sendMessage(room, eventId, data) {
         const p = this.puppets[room.puppetId];
         if (!p) return null;
 
         try {
             // Register message with deduplicator
             const key = `${room.puppetId};${room.roomId}`;
-            this.deduper.unlock(key, p.data.userId, data.source_guid);
+            this.deduper.unlock(key, p.data.userId, eventId);
 
+            let res;
             if (room.roomId.includes("+")) {
-                return (await p.client.api.post("/direct_messages", {
+                res = (await p.client.api.post("/direct_messages", {
                     direct_message: {
                         ...data,
+                        source_guid: eventId,
                         recipient_id: room.roomId.split("+").find(userId => userId !== p.data.userId)
                     }
                 })).data.response;
             } else {
-                return (await p.client.api.post(`/groups/${room.roomId}/messages`, {
-                    message: data
+                res = (await p.client.api.post(`/groups/${room.roomId}/messages`, {
+                    message: {
+                        ...data,
+                        source_guid: eventId
+                    }
                 })).data.response;
             }
+
+            // Register message with event store to track replies and likes
+            this.puppet.eventSync.insert(
+                room, eventId, res.direct_message ? res.direct_message.id : res.message.id
+            );
         } catch (err) {
             log.warn(`Failed to send message to ${room.roomId}: ${err}`);
             await this.puppet.sendStatusMessage(room, "Failed to send message");
@@ -91,15 +101,9 @@ export class GroupMe {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        const res = await this.sendMessage(room, {
-            source_guid: data.eventId,
+        await this.sendMessage(room, data.eventId, {
             text: data.body
         });
-        this.puppet.eventSync.insert(
-            room,
-            data.eventId,
-            res.direct_message ? res.direct_message.id : res.message.id
-        );
     }
 
     async handleMatrixFile(room, data, asUser, event) {
@@ -118,18 +122,12 @@ export class GroupMe {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            const res = await this.sendMessage(room, {
-                source_guid: data.eventId,
+            await this.sendMessage(room, data.eventId, {
                 attachments: [{
                     type: "file",
                     file_id: fileId
                 }]
             });
-            this.puppet.eventSync.insert(
-                room,
-                data.eventId,
-                res.direct_message ? res.direct_message.id : res.message.id
-            );
         } catch (err) {
             log.warn(`Failed to upload file ${data.mxc}: ${err}`);
             await this.puppet.sendStatusMessage(room, "Failed to upload file");
@@ -147,18 +145,12 @@ export class GroupMe {
                 headers: { "Content-Type": data.info.mimetype }
             })).data;
 
-            const res = await this.sendMessage(room, {
-                source_guid: data.eventId,
+            await this.sendMessage(room, data.eventId, {
                 attachments: [{
                     type: "image",
                     url: imageInfo.payload.url
                 }]
             });
-            this.puppet.eventSync.insert(
-                room,
-                data.eventId,
-                res.direct_message ? res.direct_message.id : res.message.id
-            );
         } catch (err) {
             log.warn(`Failed to upload image ${data.mxc}: ${err}`);
             await this.puppet.sendStatusMessage(room, "Failed to upload image");
@@ -178,8 +170,7 @@ export class GroupMe {
                 await this.puppet.sendStatusMessage(room, "Failed to like message");
             }
         } else {
-            const res = await this.sendMessage(room, {
-                source_guid: event.eventId,
+            await this.sendMessage(room, event.eventId, {
                 text: reaction,
                 attachments: [{
                     type: "reply",
@@ -187,11 +178,6 @@ export class GroupMe {
                     base_reply_id: eventId
                 }]
             });
-            this.puppet.eventSync.insert(
-                room,
-                event.eventId,
-                res.direct_message ? res.direct_message.id : res.message.id
-            );
         }
     }
 
@@ -213,8 +199,7 @@ export class GroupMe {
         const p = this.puppets[room.puppetId];
         if (!p) return;
 
-        const res = await this.sendMessage(room, {
-            source_guid: data.eventId,
+        await this.sendMessage(room, data.eventId, {
             text: data.body.split("\n\n")[1],
             attachments: [{
                 type: "reply",
@@ -222,11 +207,6 @@ export class GroupMe {
                 base_reply_id: eventId
             }]
         });
-        this.puppet.eventSync.insert(
-            room,
-            data.eventId,
-            res.direct_message ? res.direct_message.id : res.message.id
-        );
     }
 
     async handleGroupMeMessage(puppetId, message) {
