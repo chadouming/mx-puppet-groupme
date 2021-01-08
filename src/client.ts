@@ -1,11 +1,16 @@
-import EventEmitter from "events";
+import { EventEmitter } from "events";
 import { URL } from "url";
-import Axios from "axios";
+import Axios, { AxiosInstance } from "axios";
 import Faye from "faye";
 
 export class Client extends EventEmitter {
-    static API_BASE = "https://api.groupme.com/v3";
-    faye = new Faye.Client("https://push.groupme.com/faye", { timeout: 120 });
+    private static API_BASE = "https://api.groupme.com/v3";
+    private faye = new Faye.Client("https://push.groupme.com/faye", { timeout: 120 });
+
+    private token: string;
+    public api: AxiosInstance;
+    public fileApi: AxiosInstance;
+    public imageApi: AxiosInstance;
 
     constructor(token) {
         super();

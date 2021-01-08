@@ -1,13 +1,14 @@
 import Util from "util";
 import { URL } from "url";
 import Axios from "axios";
-import { Log } from "mx-puppet-bridge";
+import { Log, IRetList } from "mx-puppet-bridge";
 import { Client } from "./client.js";
 
 const log = new Log("GroupMePuppet:groupme");
 
 export class GroupMe {
-    puppets = {};
+    private puppet;
+    private puppets = {};
 
     constructor(puppet) {
         this.puppet = puppet;
@@ -537,7 +538,7 @@ export class GroupMe {
         if (!p) return null;
 
         try {
-            const list = [];
+            const list: IRetList[] = [];
 
             const groups = (await p.client.api.get("/groups", { params: { per_page: "500" } })).data.response;
             groups.forEach(group => {

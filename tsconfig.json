@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "target": "es2019",
+    "noImplicitAny": false,
+    "inlineSourceMap": true,
+    "outDir": "./build",
+    "types": ["node"],
+    "strictNullChecks": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "compileOnSave": true,
+  "include": [
+    "src/**/*"
+  ]
+}
