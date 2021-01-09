@@ -457,6 +457,7 @@ export class GroupMe {
 
                     let replyId: string | null = null;
                     let isFile = false;
+                    let isVideo = false;
 
                     await Promise.all(message.subject.attachments.map(async (attachment: any) => {
                         switch (attachment.type) {
@@ -479,6 +480,11 @@ export class GroupMe {
                                 );
                                 break;
                             }
+                            case "video": {
+                                isVideo = true;
+                                await this.puppet.sendVideo(sendParams, attachment.url);
+                                break;
+                            }
                             case "image": {
                                 await this.puppet.sendImage(sendParams, attachment.url);
                                 break;
@@ -489,13 +495,23 @@ export class GroupMe {
                         }
                     }));
 
-                    // Filter out "Shared a document" message
                     let body: string | null = message.subject.text;
+
+                    // Filter out "Shared a document" message
                     if (isFile) {
                         if (body!.startsWith("Shared a document: ")) {
                             body = null;
                         } else {
                             body = body!.replace(/ - Shared a document: \S+$/g, "");
+                        }
+                    }
+
+                    // Filter out video URL
+                    if (isVideo) {
+                        if (body!.startsWith("https://v.groupme.com/")) {
+                            body = null;
+                        } else {
+                            body = body!.replace(/ https:\/\/v\.groupme\.com\/\S+$/g, "");
                         }
                     }
 
