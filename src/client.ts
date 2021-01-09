@@ -2,10 +2,16 @@ import { EventEmitter } from "events";
 import { URL } from "url";
 import Axios, { AxiosInstance } from "axios";
 import Faye from "faye";
+import { Log } from "mx-puppet-bridge";
+
+const log = new Log("GroupMePuppet:client");
 
 export class Client extends EventEmitter {
     private static API_BASE = "https://api.groupme.com/v3";
     private faye = new Faye.Client("https://push.groupme.com/faye", { timeout: 120 });
+
+    private dmListeners: Set<string> = new Set();
+    private refreshDmsTimer: NodeJS.Timeout;
 
     private token: string;
     public api: AxiosInstance;
@@ -48,32 +54,65 @@ export class Client extends EventEmitter {
         });
     }
 
-    async start() {
-        const userId: string = (await this.api.get("/users/me")).data.response.user_id;
+    private async listenAllGroups() {
         const groupIds = (await this.api.get("/groups", {
             params: {
                 per_page: "500",
                 omit: "memberships"
             }
-        })).data.response.map((group: any): string => group.id);
+        })).data.response.map(group => group.id);
+
+        await Promise.all(groupIds.map(groupId =>
+            this.faye.subscribe(`/group/${groupId}`, (event: any) =>
+                this.emit("channelEvent", groupId, event)
+            )
+        ));
+    }
+
+    private async listenAllDms() {
+        const dmIds = (await this.api.get("/chats", {
+            params: { per_page: "100" }
+        })).data.response
+            .map(dm => dm.last_message.conversation_id)
+            // Only look for channels we're not already listening to
+            .filter(dmId => !this.dmListeners.has(dmId));
+
+        await Promise.all(dmIds.map(dmId =>
+            this.faye.subscribe(`/direct_message/${dmId.replace(/\+/g, "_")}`, (event: any) =>
+                this.emit("channelEvent", dmId, event)
+            )
+        ));
+
+        // Mark these channels as having listeners
+        dmIds.forEach(dmId => this.dmListeners.add(dmId));
+    }
+
+    async start() {
+        const userId: string = (await this.api.get("/users/me")).data.response.user_id;
 
         await Promise.all([
             this.faye.subscribe(`/user/${userId}`, (message: any) => this.emit("message", message)),
-            ...groupIds.map(groupId =>
-                this.faye.subscribe(`/group/${groupId}`, (event: any) =>
-                    this.emit("groupEvent", groupId, event)
-                )
-            )
+            this.listenAllGroups(),
+            this.listenAllDms()
         ]);
+
+        // Refresh the DM listeners each minute, since GroupMe
+        // doesn't notify us of new DM channels
+        const refreshDms = async () => {
+            log.verbose("Refreshing DM listeners...");
+            await this.listenAllDms();
+        };
+        this.refreshDmsTimer = setInterval(refreshDms, 60000);
     }
 
     async stop() {
         await this.faye.disconnect();
+        clearInterval(this.refreshDmsTimer);
     }
 
     async listenGroup(groupId: string) {
         await this.faye.subscribe(`/group/${groupId}`, (event: any) =>
-            this.emit("groupEvent", groupId, event)
+            this.emit("channelEvent", groupId, event)
         );
     }
 

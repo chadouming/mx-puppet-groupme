@@ -68,7 +68,7 @@ export class GroupMe {
                     log.error(`Failed to handle GroupMe message: ${err}`);
                 }
             });
-            p.client.on("groupEvent", async (roomId: string, event: any) => {
+            p.client.on("channelEvent", async (roomId: string, event: any) => {
                 try {
                     await this.handleGroupMeEvent.bind(this)(puppetId, roomId, event);
                 } catch (err) {
