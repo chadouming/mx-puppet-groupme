@@ -1,6 +1,7 @@
 import fromEntries from "fromentries";
 import Util from "util";
 import { URL } from "url";
+import FormData from "form-data";
 import Axios from "axios";
 import {
     Log,
@@ -199,6 +200,51 @@ export class GroupMe {
             log.warn(`Failed to upload image ${data.mxc}: ${err}`);
             await this.puppet.sendStatusMessage(room, "Failed to upload image");
             return;
+        }
+    }
+
+    async handleMatrixVideo(
+        room: IRemoteRoom,
+        data: IFileEvent,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
+        const p = this.puppets[room.puppetId];
+        if (!p) return;
+
+        try {
+            const videoData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
+            const form = new FormData();
+            form.append("file", videoData);
+            const videoInfo: any = (await p.client.videoApi.post("/transcode", form.getBuffer(), {
+                headers: {
+                    ...form.getHeaders(),
+                    "X-Conversation-ID": room.roomId
+                },
+                maxBodyLength: Infinity
+            })).data;
+            const videoId: string = new URL(videoInfo.status_url).searchParams.get("job")!;
+
+            let jobStatus = (await p.client.videoApi.get("/status", {
+                params: { job: videoId }
+            })).data;
+            while (jobStatus.status !== "complete") {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                jobStatus = (await p.client.videoApi.get("/status", {
+                    params: { job: videoId }
+                })).data;
+            }
+
+            await this.sendMessage(room, data.eventId!, {
+                attachments: [{
+                    type: "video",
+                    url: jobStatus.url,
+                    preview_url: jobStatus.thumbnail_url
+                }]
+            });
+        } catch (err) {
+            log.warn(`Failed to upload video ${data.mxc}: ${err}`);
+            await this.puppet.sendStatusMessage(room, "Failed to upload video");
         }
     }
 

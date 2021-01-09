@@ -42,6 +42,7 @@ const protocol: IProtocolInformation = {
     features: {
         file: true,
         image: true,
+        video: true,
         reply: true,
         globalNamespace: true,
         typingTimeout: 1000
@@ -77,6 +78,7 @@ async function run() {
     puppet.on("message", groupme.handleMatrixMessage.bind(groupme));
     puppet.on("file", groupme.handleMatrixFile.bind(groupme));
     puppet.on("image", groupme.handleMatrixImage.bind(groupme));
+    puppet.on("video", groupme.handleMatrixVideo.bind(groupme));
     puppet.on("reaction", groupme.handleMatrixReaction.bind(groupme));
     puppet.on("removeReaction", groupme.handleMatrixRemoveReaction.bind(groupme));
     puppet.on("reply", groupme.handleMatrixReply.bind(groupme));
