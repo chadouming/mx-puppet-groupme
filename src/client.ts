@@ -19,13 +19,14 @@ export class Client extends EventEmitter {
         // Add access token to outgoing subscriptions
         this.faye.addExtension({
             outgoing: (message: any, callback: (message: any) => any) => {
-                if (message.channel === "/meta/subscribe") {
+                if (
+                    message.channel === "/meta/subscribe" ||
+                    message.channel.startsWith("/group/") ||
+                    message.channel.startsWith("/direct_message/")
+                ) {
                     callback({
                         ...message,
-                        ext: {
-                            "access_token": token,
-                            "timestamp": Math.round(new Date().getTime() / 1000)
-                        }
+                        ext: { "access_token": token }
                     })
                 } else {
                     callback(message)
@@ -74,5 +75,9 @@ export class Client extends EventEmitter {
         await this.faye.subscribe(`/group/${groupId}`, (event: any) =>
             this.emit("groupEvent", groupId, event)
         );
+    }
+
+    async publish(channel: string, data: any) {
+        await this.faye.publish(channel, data);
     }
 }

@@ -43,7 +43,8 @@ const protocol: IProtocolInformation = {
         file: true,
         image: true,
         reply: true,
-        globalNamespace: true
+        globalNamespace: true,
+        typingTimeout: 1000
     },
     id: "groupme",
     displayname: "GroupMe",
@@ -79,6 +80,7 @@ async function run() {
     puppet.on("reaction", groupme.handleMatrixReaction.bind(groupme));
     puppet.on("removeReaction", groupme.handleMatrixRemoveReaction.bind(groupme));
     puppet.on("reply", groupme.handleMatrixReply.bind(groupme));
+    puppet.on("typing", groupme.handleMatrixTyping.bind(groupme));
     puppet.setGetUserIdsInRoomHook(groupme.getUserIdsInRoom.bind(groupme));
     puppet.setCreateRoomHook(groupme.createRoom.bind(groupme));
     puppet.setCreateUserHook(groupme.createUser.bind(groupme));

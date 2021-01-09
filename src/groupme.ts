@@ -48,6 +48,8 @@ export class GroupMe {
         };
         const p = this.puppets[puppetId];
 
+        p.data.typingTimers = {};
+
         try {
             await p.client.start();
 
@@ -267,6 +269,44 @@ export class GroupMe {
                 base_reply_id: eventId
             }]
         });
+    }
+
+    async handleMatrixTyping(
+        room: IRemoteRoom,
+        typing: boolean,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
+        const p = this.puppets[room.puppetId];
+        if (!p) return;
+
+        // Clear any previous typing notification
+        if (p.data.typingTimers[room.roomId]) {
+            clearInterval(p.data.typingTimers[room.roomId]);
+            delete p.data.typingTimers[room.roomId];
+        }
+
+        if (typing) {
+            const channel = room.roomId.includes("+") ?
+                `/direct_message/${room.roomId.replace(/\+/g, "_")}` :
+                `/group/${room.roomId}`;
+
+            const sendTyping = async () => {
+                try {
+                    await p.client.publish(channel, {
+                        type: "typing",
+                        user_id: p.data.userId,
+                        started: new Date().getTime()
+                    });
+                } catch (err) {
+                    log.warn(`Failed to send typing event to ${room.roomId}: ${err}`);
+                }
+            };
+
+            sendTyping();
+            // GroupMe expects us to resend typing notifications every second
+            p.data.typingTimers[room.roomId] = setInterval(sendTyping, 1000);
+        }
     }
 
     async handleGroupMeMessage(puppetId: number, message: any) {
