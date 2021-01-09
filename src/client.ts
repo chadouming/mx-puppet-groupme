@@ -15,6 +15,7 @@ export class Client extends EventEmitter {
 
     private token: string;
     public api: AxiosInstance;
+    public oldApi: AxiosInstance;
     public fileApi: AxiosInstance;
     public imageApi: AxiosInstance;
 
@@ -42,6 +43,10 @@ export class Client extends EventEmitter {
 
         this.api = Axios.create({
             baseURL: "https://api.groupme.com/v3",
+            headers: { "X-Access-Token": token }
+        });
+        this.oldApi = Axios.create({
+            baseURL: "https://v2.groupme.com",
             headers: { "X-Access-Token": token }
         });
         this.fileApi = Axios.create({

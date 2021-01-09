@@ -309,6 +309,28 @@ export class GroupMe {
         }
     }
 
+    async handleMatrixReadReceipt(
+        room: IRemoteRoom,
+        eventId: string,
+        content: any,
+        asUser: ISendingUser | null,
+        event: any
+    ) {
+        const p = this.puppets[room.puppetId];
+        if (!p) return;
+
+        try {
+            await p.client.oldApi.post("/read_receipts", {
+                read_receipt: {
+                    chat_id: room.roomId,
+                    message_id: eventId
+                }
+            });
+        } catch (err) {
+            log.warn(`Failed to send read receipt to ${room.roomId}: ${err}`);
+        }
+    }
+
     async handleGroupMeMessage(puppetId: number, message: any) {
         const p = this.puppets[puppetId];
         if (!p) return;
