@@ -23,6 +23,7 @@ COPY . .
 RUN chown -R node:node /opt/mx-puppet-groupme
 USER node
 RUN npm install
+RUN npm run build
 
 
 FROM node:alpine
@@ -41,6 +42,6 @@ COPY --from=builder /opt/mx-puppet-groupme/ .
 RUN chmod +x docker-run.sh
 
 # change workdir to /data so relative paths in the config.yaml
-# point to the persisten volume
+# point to the persistent volume
 WORKDIR /data
 ENTRYPOINT ["/opt/mx-puppet-groupme/docker-run.sh"]

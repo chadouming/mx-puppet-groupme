@@ -32,7 +32,7 @@ else
 fi
 
 # $su_exec is used in case we have to drop the privileges
-exec $su_exec /usr/local/bin/node '/opt/mx-puppet-groupme/src/index.js' \
+exec $su_exec /usr/local/bin/node '/opt/mx-puppet-groupme/build/index.js' \
      -c "$CONFIG_PATH" \
      -f "$REGISTRATION_PATH" \
      $args
