@@ -560,6 +560,20 @@ export class GroupMe {
                 };
 
                 await this.puppet.setUserTyping(sendParams, true);
+                break;
+            }
+            case "read_receipt.create": {
+                await this.puppet.sendReadReceipt({
+                    room: {
+                        roomId: event.subject.chat_id,
+                        puppetId
+                    },
+                    user: {
+                        userId: event.subject.user_id,
+                        puppetId
+                    },
+                    eventId: event.subject.message_id
+                });
             }
         }
     }
