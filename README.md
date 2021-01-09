@@ -2,7 +2,7 @@
 
 A puppeting Matrix bridge for GroupMe built with mx-puppet-bridge
 
-For discussion and support, join us on Matrix at [#mx-puppet-groupme:townsendandsmith.ml](https://matrix.to/#/!ktMhNInqGQeRMMNyIA:townsendandsmith.ml?via=townsendandsmith.ml).
+For discussion and support, join us on Matrix at [#mx-puppet-groupme:townsendandsmith.ml](https://matrix.to/#/#mx-puppet-groupme:townsendandsmith.ml).
 
 ## Setup
 
