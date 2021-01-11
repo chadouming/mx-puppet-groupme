@@ -14,6 +14,8 @@ export class Client extends EventEmitter {
     private refreshDmsTimer: NodeJS.Timeout;
 
     private token: string;
+    private userId: string;
+
     public api: AxiosInstance;
     public oldApi: AxiosInstance;
     public fileApi: AxiosInstance;
@@ -83,7 +85,7 @@ export class Client extends EventEmitter {
         const dmIds = (await this.api.get("/chats", {
             params: { per_page: "100" }
         })).data.response
-            .map(dm => dm.last_message.conversation_id)
+            .map(dm => [this.userId, dm.other_user.id].sort().join("+"))
             // Only look for channels we're not already listening to
             .filter(dmId => !this.dmListeners.has(dmId));
 
@@ -98,10 +100,10 @@ export class Client extends EventEmitter {
     }
 
     async start() {
-        const userId: string = (await this.api.get("/users/me")).data.response.user_id;
+        this.userId = (await this.api.get("/users/me")).data.response.user_id;
 
         await Promise.all([
-            this.faye.subscribe(`/user/${userId}`, (message: any) => this.emit("message", message)),
+            this.faye.subscribe(`/user/${this.userId}`, message => this.emit("message", message)),
             this.listenAllGroups(),
             this.listenAllDms()
         ]);

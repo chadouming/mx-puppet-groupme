@@ -913,7 +913,7 @@ export class GroupMe {
 
             await Promise.all(dms.map(dm =>
                 this.puppet.bridgeRoom({
-                    roomId: dm.last_message.conversation_id,
+                    roomId: [p.data.userId, dm.other_user.id].sort().join("+"),
                     puppetId
                 })
             ));
