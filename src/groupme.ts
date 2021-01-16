@@ -399,6 +399,19 @@ export class GroupMe {
             case "line.create": {
                 if (message.subject.user_id === "system") {
                     switch (message.subject.event.type) {
+                        case "membership.announce.joined": {
+                            await this.puppet.addUser({
+                                room: {
+                                    roomId: message.subject.group_id,
+                                    puppetId
+                                },
+                                user: {
+                                    userId: message.subject.event.data.user.id.toString(),
+                                    puppetId
+                                }
+                            });
+                            break;
+                        }
                         case "membership.announce.added": {
                             await Promise.all(
                                 message.subject.event.data.added_users.map(user =>
@@ -416,7 +429,8 @@ export class GroupMe {
                             );
                             break;
                         }
-                        case "membership.notifications.exited": {
+                        case "membership.notifications.exited":
+                        case "membership.notifications.removed": {
                             await this.puppet.removeUser({
                                 room: {
                                     roomId: message.subject.group_id,
