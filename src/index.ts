@@ -85,6 +85,7 @@ async function run() {
     puppet.on("typing", groupme.handleMatrixTyping.bind(groupme));
     puppet.on("read", groupme.handleMatrixReadReceipt.bind(groupme));
     puppet.setGetUserIdsInRoomHook(groupme.getUserIdsInRoom.bind(groupme));
+    puppet.setRoomExistsHook(groupme.roomExists.bind(groupme));
     puppet.setCreateRoomHook(groupme.createRoom.bind(groupme));
     puppet.setCreateUserHook(groupme.createUser.bind(groupme));
     puppet.setGetDmRoomIdHook(groupme.getDmRoomId.bind(groupme));

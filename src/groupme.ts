@@ -50,6 +50,7 @@ export class GroupMe {
         const p = this.puppets[puppetId];
 
         p.data.typingTimers = {};
+        p.data.membershipCache = {};
 
         try {
             await p.client.start();
@@ -64,14 +65,14 @@ export class GroupMe {
 
             p.client.on("message", async (message: any) => {
                 try {
-                    await this.handleGroupMeMessage.bind(this)(puppetId, message);
+                    await this.handleGroupMeMessage(puppetId, message);
                 } catch (err) {
                     log.error(`Failed to handle GroupMe message: ${err}`);
                 }
             });
             p.client.on("channelEvent", async (roomId: string, event: any) => {
                 try {
-                    await this.handleGroupMeEvent.bind(this)(puppetId, roomId, event);
+                    await this.handleGroupMeEvent(puppetId, roomId, event);
                 } catch (err) {
                     log.error(`Failed to handle GroupMe event: ${err}`);
                 }
@@ -400,33 +401,47 @@ export class GroupMe {
                 if (message.subject.user_id === "system") {
                     switch (message.subject.event.type) {
                         case "membership.announce.joined": {
+                            const userId = message.subject.event.data.user.id.toString();
                             await this.puppet.addUser({
                                 room: {
                                     roomId: message.subject.group_id,
                                     puppetId
                                 },
                                 user: {
-                                    userId: message.subject.event.data.user.id.toString(),
+                                    userId,
                                     puppetId
                                 }
                             });
+
+                            // If this was us, update the membership cache
+                            if (userId === p.data.userId) {
+                                log.debug(`Added ${message.subject.group_id} to membership cache`);
+                                p.data.membershipCache[message.subject.group_id] = true;
+                            }
                             break;
                         }
                         case "membership.announce.added": {
-                            await Promise.all(
-                                message.subject.event.data.added_users.map(user =>
-                                    this.puppet.addUser({
-                                        room: {
-                                            roomId: message.subject.group_id,
-                                            puppetId
-                                        },
-                                        user: {
-                                            userId: user.id.toString(),
-                                            puppetId
-                                        }
-                                    })
-                                )
+                            const userIds = message.subject.event.data.added_users.map(
+                                user => user.id.toString()
                             );
+                            await Promise.all(userIds.map(userId =>
+                                this.puppet.addUser({
+                                    room: {
+                                        roomId: message.subject.group_id,
+                                        puppetId
+                                    },
+                                    user: {
+                                        userId,
+                                        puppetId
+                                    }
+                                })
+                            ));
+
+                            // If this was us, update the membership cache
+                            if (userIds.includes(p.data.userId)) {
+                                log.debug(`Added ${message.subject.group_id} to membership cache`);
+                                p.data.membershipCache[message.subject.group_id] = true;
+                            }
                             break;
                         }
                         case "membership.notifications.exited":
@@ -690,6 +705,30 @@ export class GroupMe {
                 log.error(`Failed to get users in ${room.roomId}: ${err}`);
                 return null;
             }
+        }
+    }
+
+    // Check whether a remote room exists and we have permission to view it
+    async roomExists(room: IRemoteRoom): Promise<boolean> {
+        const p = this.puppets[room.puppetId];
+        if (!p) return false;
+
+        if (room.roomId.includes("+")) {
+            // Ensure that we are actually part of this DM
+            return room.roomId.split("+").includes(p.data.userId);
+        } else {
+            // Check the membership cache
+            if (!p.data.membershipCache.hasOwnProperty(room.roomId)) {
+                try {
+                    log.debug(`Checking whether ${p.data.userId} is in ${room.roomId}...`);
+                    await p.client.api.get(`/groups/${room.roomId}`);
+                    p.data.membershipCache[room.roomId] = true;
+                } catch (err) {
+                    p.data.membershipCache[room.roomId] = false;
+                }
+            }
+
+            return p.data.membershipCache[room.roomId];
         }
     }
 
