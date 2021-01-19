@@ -12,6 +12,9 @@ bridge:
   #displayname: GroupMe bridge
   # Avatar of the bridge bot
   #avatarUrl: mxc://example.com/abcdef12345
+  # Strip the homeserver url from pings that are on these homeservers in the body
+  #stripHomeservers:
+  # - example.org
 
 provisioning:
   # Regex of Matrix IDs allowed to use the puppet bridge
