@@ -1,4 +1,4 @@
-FROM node:alpine AS builder
+FROM node:12-alpine AS builder
 
 WORKDIR /opt/mx-puppet-groupme
 
