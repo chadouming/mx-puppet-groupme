@@ -3,7 +3,7 @@ FROM node:alpine AS builder
 WORKDIR /opt/mx-puppet-groupme
 
 RUN apk add --no-cache \
-        python3 \
+        python2 \
         g++ \
         build-base \
         cairo-dev \
