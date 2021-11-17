@@ -1,9 +1,9 @@
-FROM node:alpine AS builder
+FROM node:14-alpine AS builder
 
 WORKDIR /opt/mx-puppet-groupme
 
 RUN apk add --no-cache \
-        python \
+        python3 \
         g++ \
         build-base \
         cairo-dev \
@@ -26,7 +26,7 @@ RUN npm install
 RUN npm run build
 
 
-FROM node:alpine
+FROM node:14-alpine
 
 VOLUME /data
 
