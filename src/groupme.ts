@@ -188,7 +188,7 @@ export class GroupMe {
         try {
             const imageData = (await Axios.get(data.url, { responseType: "arraybuffer" })).data;
             const imageInfo: any = (await p.client.imageApi.post("/pictures", imageData, {
-                headers: { "Content-Type": data.info!.mimetype }
+                headers: { "Content-Type": String(data.info!.mimetype) }
             })).data;
 
             await this.sendMessage(room, data.eventId!, {

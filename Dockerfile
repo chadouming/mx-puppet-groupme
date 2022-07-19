@@ -1,4 +1,4 @@
-FROM node:14-alpine AS builder
+FROM node:18-alpine AS builder
 
 WORKDIR /opt/mx-puppet-groupme
 
@@ -26,7 +26,7 @@ RUN npm install
 RUN npm run build
 
 
-FROM node:14-alpine
+FROM node:18-alpine
 
 VOLUME /data
 
