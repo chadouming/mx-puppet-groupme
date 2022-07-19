@@ -14,6 +14,20 @@ before_script:
 
 build_docker:
   stage: build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    IMAGE_TAG: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    LATEST_TAG: "$CI_REGISTRY_IMAGE:$BUILD_TAG"
+  script:
+    - $CONTAINER_FORMAT build -t "$IMAGE_TAG" -t "$LATEST_TAG" .
+    - $CONTAINER_FORMAT push "$IMAGE_TAG"
+    - $CONTAINER_FORMAT push "$LATEST_TAG"
+
+build_docker_branch:
+  stage: build
+  rules:
+    - if: $CI_COMMIT_BRANCH != "main"
   variables:
     IMAGE_TAG: "$CI_REGISTRY_IMAGE:$CI_COMMIT_BRANCH-$CI_COMMIT_SHORT_SHA"
     LATEST_TAG: "$CI_REGISTRY_IMAGE:$CI_COMMIT_BRANCH-$BUILD_TAG"
