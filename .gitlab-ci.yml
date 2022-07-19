@@ -1,0 +1,23 @@
+image: docker:22.06.0-beta.0-dind-alpine3.16
+services:
+  - docker:22.06.0-beta.0-dind-alpine3.16
+
+stages:
+  - build
+
+variables:
+  CONTAINER_FORMAT: docker
+  BUILD_TAG: latest
+
+before_script:
+  - $CONTAINER_FORMAT login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+build_template_default:
+  stage: build
+  variables:
+    IMAGE_TAG: "$CI_REGISTRY_IMAGE:$CI_COMMIT_BRANCH-$CI_COMMIT_SHORT_SHA"
+    LATEST_TAG: "$CI_REGISTRY_IMAGE:$CI_COMMIT_BRANCH-$BUILD_TAG"
+  script:
+    - $CONTAINER_FORMAT build -t "$IMAGE_TAG" -t "$LATEST_TAG" .
+    - $CONTAINER_FORMAT push "$IMAGE_TAG"
+    - $CONTAINER_FORMAT push "$LATEST_TAG"
