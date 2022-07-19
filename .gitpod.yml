@@ -1,0 +1,28 @@
+image:
+  file: ./.gitpod/Dockerfile
+
+tasks:
+  - command: |
+      sudo apt update && sudo apt upgrade -yq
+      mkdir -p /home/gitpod/.ssh/
+      echo $SSH_KEY_B64 | base64 -di > /home/gitpod/.ssh/id_rsa
+      echo $GPG_KEY_B64 | base64 -di > /home/gitpod/pkey.key
+      $( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )/.gitpod/init-gpg.0.sh
+
+vscode:
+  extensions:
+    - proxzima.sweetdracula
+    - vscode-icons-team.vscode-icons
+    - valentjn.vscode-ltex
+    - redhat.vscode-yaml
+    - aaron-bond.better-comments
+    - kamikillerto.vscode-colorize
+    - leodevbro.blockman
+    - editorconfig.editorconfig
+    - GitLab.gitlab-workflow
+    - eamodio.gitlens
+    - mhutchie.git-graph
+    - yzhang.markdown-all-in-one
+    - DavidAnson.vscode-markdownlint
+    - zaaack.markdown-editor
+    - ms-azuretools.vscode-docker
