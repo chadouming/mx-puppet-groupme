@@ -58,8 +58,8 @@ if (options.register) {
     puppet.readConfig(false);
     try {
         puppet.generateRegistration({
-            prefix: "_groupmepuppet_",
-            id: "groupme-puppet",
+            prefix: "bot_groupme",
+            id: "groupme",
             url: `http://${puppet.Config.bridge.bindAddress}:${puppet.Config.bridge.port}`
         });
     } catch (err) {
